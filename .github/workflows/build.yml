@@ -1,0 +1,23 @@
+name: build
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - name: Restore
+        run: dotnet restore ModernizationAssessor.sln
+      - name: Build
+        run: dotnet build ModernizationAssessor.sln --configuration Release --no-restore
+      - name: Test
+        run: dotnet test ModernizationAssessor.sln --configuration Release --no-build --verbosity normal
+      - name: Smoke run (v0.1)
+        run: dotnet run --project src/Orchestrator --configuration Release -- --inventory samples/inventory/contoso.csv --customer Contoso

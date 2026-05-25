@@ -1,0 +1,16 @@
+applicationName,environment,os,vcpus,memoryGb,storageGb,databaseEngine,monthlyRequests,publicFacing,businessCriticality,currentMonthlyCostUsd
+contoso-erp-prod,prod,WindowsServer2012,16,64,2048,SQLServer2014,2500000,false,high,4200
+contoso-erp-dr,dr,WindowsServer2012,16,64,2048,SQLServer2014,0,false,high,4200
+legacy-warehouse,prod,WindowsServer2008,8,32,4096,Oracle11g,500000,false,high,3800
+hr-portal,prod,WindowsServer2016,4,16,256,SQLServer2017,150000,true,medium,650
+crm-internal,prod,WindowsServer2019,8,32,512,SQLServer2019,800000,false,high,1100
+storefront-web,prod,Ubuntu2004,4,8,80,PostgreSQL12,5000000,true,critical,950
+storefront-api,prod,Ubuntu2004,8,16,120,PostgreSQL12,5000000,true,critical,1400
+ecommerce-cms,prod,Ubuntu2004,2,8,40,MySQL5.7,300000,true,medium,320
+sharepoint-onprem,prod,WindowsServer2016,8,32,1024,SQLServer2016,80000,false,low,1250
+file-server-corp,prod,WindowsServer2019,4,16,8192,,0,false,low,720
+mainframe-batch,prod,zOS,32,128,4096,DB2,0,false,critical,12000
+test-jenkins,dev,Ubuntu1804,2,4,80,,0,false,low,180
+dev-sandbox-1,dev,Ubuntu2204,2,8,40,,0,false,low,140
+intranet-old,prod,WindowsServer2008,2,4,40,SQLServer2008,5000,false,low,310
+analytics-cluster,prod,Ubuntu2004,24,96,2048,PostgreSQL13,200000,false,high,2900

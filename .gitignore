@@ -1,0 +1,58 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+artifacts/
+TestResults/
+*.nupkg
+*.snupkg
+
+# JetBrains / VS Code
+.idea/
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Azure / azd
+.azure/
+*.azurePubxml
+azd.env
+.env
+.env.*
+!.env.example
+
+# Secrets
+*.pfx
+*.key
+appsettings.Development.json
+appsettings.Local.json
+
+# Foundry local caches (kept locally, not pushed)
+.foundry/datasets/*
+.foundry/results/*
+!.foundry/datasets/.gitkeep
+!.foundry/results/.gitkeep
+
+# Logs
+*.log
+logs/
+
+# Build outputs
+out/
+dist/
+publish/
+
+# Python (in case any MCP tool uses it)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Sample-run outputs
+src/Orchestrator/out/
+

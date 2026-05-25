@@ -1,0 +1,52 @@
+# Foundry agent metadata (per microsoft-foundry skill contract)
+# This file is the canonical source for environment + agent config.
+# See: ~/.agents/skills/microsoft-foundry/references/agent-metadata-contract.md
+
+defaultEnvironment: dev
+
+environments:
+  dev:
+    # Populated by `azd env get-values` after `azd up`
+    projectEndpoint: ""        # AZURE_AI_PROJECT_ENDPOINT
+    agentName: "modernization-assessor-orchestrator"
+    azureContainerRegistry: "" # AZURE_CONTAINER_REGISTRY_NAME
+    modelDeploymentName: "gpt-4.1"
+    region: "northcentralus"
+    evaluationSuites: []
+
+  prod:
+    projectEndpoint: ""
+    agentName: "modernization-assessor-orchestrator"
+    azureContainerRegistry: ""
+    modelDeploymentName: "gpt-4.1"
+    region: "northcentralus"
+    evaluationSuites: []
+
+agents:
+  # Orchestrator (hosted, MAF .NET)
+  - name: modernization-assessor-orchestrator
+    kind: hosted
+    framework: microsoft-agent-framework
+    runtime: dotnet9
+    description: "MAF orchestrator that routes a modernization assessment request across specialist agents."
+
+  # Specialists (prompt agents in Foundry)
+  - name: discovery-agent
+    kind: prompt
+    description: "Normalize raw IT inventory data (Azure Migrate CSV, CMDB exports, Excel) into a canonical schema."
+
+  - name: workload-classifier-agent
+    kind: prompt
+    description: "Classify each workload as IaaS-lift, PaaS-refactor, SaaS-replace, or retire — with rationale."
+
+  - name: cost-estimator-agent
+    kind: prompt
+    description: "Estimate 3-year TCO using Azure Retail Pricing tool. (v0.2)"
+
+  - name: migration-planner-agent
+    kind: prompt
+    description: "Build a wave-based migration roadmap with dependency awareness. (v0.2)"
+
+  - name: risk-assessment-agent
+    kind: prompt
+    description: "Apply Well-Architected Framework checks + regional regulatory considerations. (v0.2)"
