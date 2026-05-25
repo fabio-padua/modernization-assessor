@@ -56,3 +56,7 @@ venv/
 # Sample-run outputs
 src/Orchestrator/out/
 
+
+# PPTX visual QA snapshots
+docs/qa/
+
