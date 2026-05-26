@@ -15,14 +15,21 @@ Built with **Microsoft Agent Framework (MAF)** + **Azure AI Foundry**. C# / .NET
 1. [Why this exists](#why-this-exists)
 2. [What it does](#what-it-does)
 3. [Architecture](#architecture)
+   - [End-to-end flow](#end-to-end-flow)
+   - [What lives in Azure](#what-lives-in-azure)
+   - [Inside the orchestrator](#inside-the-orchestrator)
+   - [Agent choreography (v0.2 target)](#agent-choreography-v02-target)
+   - [Single-run sequence](#single-run-sequence)
+   - [Why each piece](#why-each-piece)
 4. [The 7 R's classification model](#the-7-rs-classification-model)
 5. [Repository layout](#repository-layout)
 6. [Quickstart](#quickstart)
-7. [Partner-reusable design principles](#partner-reusable-design-principles)
-8. [Roadmap](#roadmap)
-9. [Comparison to existing tooling](#comparison-to-existing-tooling)
-10. [Responsible AI & human-in-the-loop](#responsible-ai--human-in-the-loop)
-11. [License](#license)
+7. [Deployment](#deployment)
+8. [Partner-reusable design principles](#partner-reusable-design-principles)
+9. [Roadmap](#roadmap)
+10. [Comparison to existing tooling](#comparison-to-existing-tooling)
+11. [Responsible AI & human-in-the-loop](#responsible-ai--human-in-the-loop)
+12. [License](#license)
 
 ---
 
@@ -50,39 +57,176 @@ This repository is the reference implementation of that idea, packaged so any Mi
 
 ## Architecture
 
+Five views, from outermost to innermost: how a partner triggers a run, what gets provisioned in Azure, what the orchestrator does today, what the agent choreography will look like in v0.2, and what happens during a single run.
+
+### End-to-end flow
+
+From partner laptop to customer-ready report. v0.1 ends at step 5; v0.2 (deployment pipeline already scaffolded) automates 1–4.
+
+```mermaid
+flowchart LR
+    P["Partner SE<br/>(laptop)"]:::human
+    REPO["GitHub repo<br/>fabio-padua/modernization-assessor"]:::repo
+    GHA["GitHub Actions<br/>deploy.yml"]:::ci
+    AZ["Azure subscription"]:::cloud
+    OUT["assessment-*.md<br/>+ .json"]:::artifact
+    REV["Human reviewer<br/>(MRV gate)"]:::human
+    CUST["Customer<br/>deliverable"]:::deliverable
+
+    P -- "1. push code /<br/>workflow_dispatch" --> REPO
+    REPO --> GHA
+    GHA -- "2. provision Bicep" --> AZ
+    GHA -- "3. build & push image" --> AZ
+    GHA -- "4. update + start ACA Job" --> AZ
+    AZ -- "5. orchestrator runs" --> OUT
+    OUT -- "6. review & edit" --> REV
+    REV -- "7. sign-off" --> CUST
+
+    classDef human fill:#E8F1FA,stroke:#2B6CB0,color:#1A365D
+    classDef repo fill:#F0E8FA,stroke:#6B46C1,color:#322659
+    classDef ci fill:#FFF5E5,stroke:#C05621,color:#652B19
+    classDef cloud fill:#E6FFFA,stroke:#2C7A7B,color:#234E52
+    classDef artifact fill:#FEFCBF,stroke:#B7791F,color:#5F370E
+    classDef deliverable fill:#FED7E2,stroke:#B83280,color:#521B41
 ```
-                    ┌────────────────────────────────────────────────┐
-                    │   Partner / customer-facing UI (Teams, web)    │
-                    └─────────────────────┬──────────────────────────┘
-                                          │
-                    ┌─────────────────────▼──────────────────────────┐
-                    │   Azure API Management — AI Gateway            │
-                    │   per-partner token quotas · content safety    │
-                    │   jailbreak detection · cost attribution       │
-                    └─────────────────────┬──────────────────────────┘
-                                          │
-                    ┌─────────────────────▼──────────────────────────┐
-                    │   MAF Orchestrator (Azure Container Apps)      │
-                    │   C# .NET 9 · graph-based multi-agent workflow │
-                    │   durable checkpoint/resume · OTel tracing     │
-                    └──┬──────────────────────────────────────────┬──┘
-                       │                                          │
-       ┌───────────────▼──────────────┐         ┌─────────────────▼─────────────┐
-       │  Foundry Agent Service       │         │  MCP tool servers (ACA jobs)  │
-       │  ──  5 specialist agents:    │         │  ──  Azure Pricing            │
-       │    · Discovery               │         │  ──  Inventory parser         │
-       │    · Workload Classifier     │         │  ──  Partner extension point  │
-       │    · Cost Estimator          │         └───────────────────────────────┘
-       │    · Migration Planner       │
-       │    · Risk Assessment         │
-       └────────┬─────────────────────┘
-                │
-   ┌────────────▼─────────┐   ┌─────────────────────┐   ┌────────────────────────┐
-   │  Azure AI Search     │   │  Azure Cosmos DB    │   │  App Insights (OTel)   │
-   │  RAG over WAF +      │   │  thread + agent     │   │  spans tagged          │
-   │  migration KB        │   │  state              │   │  partnerId, agentId,   │
-   │                      │   │                     │   │  toolName, tokenCost   │
-   └──────────────────────┘   └─────────────────────┘   └────────────────────────┘
+
+### What lives in Azure
+
+The deployment pipeline provisions one resource group per partner+environment. All v0.2 components are there; v0.3 will add AI Search, Cosmos DB, APIM, and Key Vault.
+
+```mermaid
+flowchart TB
+    subgraph SUB["Azure subscription"]
+        subgraph RG["RG: rg-modassessor-&lt;partner&gt;-&lt;env&gt;"]
+            LAW["Log Analytics"]:::obs
+            AI["App Insights"]:::obs
+            UAMI["User-assigned<br/>Managed Identity"]:::id
+            ACR["Azure Container Registry<br/>(orchestrator image)"]:::reg
+            subgraph FNDRY["Azure AI Foundry account"]
+                PRJ["Project: modassessor"]:::ai
+                MOD["Model deployment<br/>gpt-4.1 (GlobalStandard)"]:::ai
+            end
+            subgraph ACA["Container Apps Environment"]
+                JOB["Container Apps Job<br/>(orchestrator CLI)<br/>triggerType: Manual"]:::job
+            end
+        end
+    end
+
+    JOB -- "pulls image<br/>(AcrPull)" --> ACR
+    JOB -- "calls<br/>(OpenAI User + AI User)" --> PRJ
+    PRJ --> MOD
+    JOB -- "logs + traces" --> AI
+    AI --> LAW
+    UAMI -. "federated identity" .- JOB
+
+    classDef obs fill:#EBF8FF,stroke:#2B6CB0,color:#1A365D
+    classDef id fill:#F0E8FA,stroke:#6B46C1,color:#322659
+    classDef reg fill:#FFF5E5,stroke:#C05621,color:#652B19
+    classDef ai fill:#E6FFFA,stroke:#2C7A7B,color:#234E52
+    classDef job fill:#FED7E2,stroke:#B83280,color:#521B41
+```
+
+### Inside the orchestrator
+
+Today (v0.1) the pipeline is deterministic C#. Each stage is the structural placeholder for the corresponding Foundry agent landing in v0.2.
+
+```mermaid
+flowchart LR
+    CSV["inventory CSV<br/>(Azure Migrate / CMDB)"]:::input
+    NORM["DiscoveryStage<br/>(CsvHelper)"]:::stage
+    WL["Workload[]<br/>(canonical JSON)"]:::data
+    CLS["ClassifierStage<br/>(7 R's rules)"]:::stage
+    CL["Classification[]"]:::data
+    MD["MarkdownRenderer"]:::stage
+    REP["assessment-*.md<br/>assessment-*.json"]:::output
+
+    CSV --> NORM --> WL --> CLS --> CL --> MD --> REP
+
+    classDef input fill:#FEFCBF,stroke:#B7791F,color:#5F370E
+    classDef stage fill:#E6FFFA,stroke:#2C7A7B,color:#234E52
+    classDef data fill:#EBF8FF,stroke:#2B6CB0,color:#1A365D
+    classDef output fill:#FED7E2,stroke:#B83280,color:#521B41
+```
+
+### Agent choreography (v0.2 target)
+
+Each folder under [`src/Agents/`](src/Agents/) becomes a real Foundry agent. The orchestrator becomes a coordinator that calls them sequentially with one fan-out for cost + risk.
+
+```mermaid
+flowchart TB
+    IN["Inventory input<br/>(any shape)"]:::input
+
+    subgraph FND["Microsoft Foundry — project: modassessor"]
+        A1["DiscoveryAgent<br/>(normalize → Workload[])"]:::agent
+        A2["WorkloadClassifierAgent<br/>(7 R's + target Azure svc)"]:::agent
+        A3["CostEstimatorAgent<br/>uses AzurePricingTool MCP"]:::agent
+        A4["RiskAssessmentAgent<br/>(data, compliance, deps)"]:::agent
+        A5["MigrationPlannerAgent<br/>(wave plan, sequencing)"]:::agent
+    end
+
+    subgraph MCP["MCP tools"]
+        T1["InventoryParserTool"]:::tool
+        T2["AzurePricingTool"]:::tool
+    end
+
+    REPORT["AssessmentReport<br/>(JSON + Markdown)"]:::output
+    REV["Human reviewer<br/>(MRV)"]:::human
+    CUST["Customer<br/>deliverable"]:::deliverable
+
+    IN --> A1
+    A1 -. "Excel/CMDB parse" .-> T1
+    A1 --> A2
+    A2 --> A3
+    A2 --> A4
+    A3 -. "SKU prices" .-> T2
+    A3 --> A5
+    A4 --> A5
+    A5 --> REPORT --> REV --> CUST
+
+    classDef input fill:#FEFCBF,stroke:#B7791F,color:#5F370E
+    classDef agent fill:#E6FFFA,stroke:#2C7A7B,color:#234E52
+    classDef tool fill:#F0E8FA,stroke:#6B46C1,color:#322659
+    classDef output fill:#EBF8FF,stroke:#2B6CB0,color:#1A365D
+    classDef human fill:#E8F1FA,stroke:#2B6CB0,color:#1A365D
+    classDef deliverable fill:#FED7E2,stroke:#B83280,color:#521B41
+```
+
+### Single-run sequence
+
+What happens between `az containerapp job start` and a finished report.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor SE as Partner SE
+    participant GH as GitHub Actions
+    participant ACA as ACA Job
+    participant ORCH as Orchestrator (container)
+    participant FND as Foundry project
+    participant MCP as MCP tools
+    participant OUT as /app/out
+
+    SE->>GH: workflow_dispatch (or push)
+    GH->>ACA: az containerapp job start
+    ACA->>ORCH: spin replica, inject env vars
+    ORCH->>ORCH: load inventory CSV
+    ORCH->>FND: invoke DiscoveryAgent
+    FND-->>ORCH: Workload[]
+    ORCH->>FND: invoke WorkloadClassifierAgent
+    FND-->>ORCH: Classification[]
+    par cost & risk in parallel
+        ORCH->>FND: CostEstimatorAgent
+        FND->>MCP: AzurePricingTool.getPrice()
+        MCP-->>FND: SKU price
+        FND-->>ORCH: cost estimates
+    and
+        ORCH->>FND: RiskAssessmentAgent
+        FND-->>ORCH: risk scores
+    end
+    ORCH->>FND: MigrationPlannerAgent (waves)
+    FND-->>ORCH: WavePlan
+    ORCH->>OUT: write .md + .json
+    ACA-->>SE: job execution complete (logs in App Insights)
 ```
 
 ### Why each piece
@@ -181,17 +325,31 @@ src/Orchestrator/out/
 
 The Markdown file is a complete (if rough) draft assessment ready for human review.
 
-### v0.2 — deploy to Azure (roadmap)
+### v0.2 — deploy to Azure
+
+The deployment pipeline is scaffolded and validated. Two ways to run it:
+
+**A. GitHub Actions (recommended).** Configure OIDC + secrets per [docs/deployment-runbook.md](docs/deployment-runbook.md), then trigger **Actions → Deploy → Run workflow**. The four-job pipeline ([.github/workflows/deploy.yml](.github/workflows/deploy.yml)) does `provision → build_and_push → deploy_job → smoke`.
+
+**B. Local `azd up`.**
 
 ```pwsh
 azd auth login
-azd init
-azd env set ENABLE_HOSTED_AGENTS true
+azd env new modassessor-dev
 azd env set PARTNER_CODE acme
+azd env set AZURE_LOCATION northcentralus
 azd up
 ```
 
-This provisions Foundry + ACA + APIM + AI Search + Cosmos + App Insights into the active subscription, deploys the orchestrator container, creates the five Foundry agents, and uploads sample datasets to AI Search.
+Either path provisions Log Analytics + App Insights, a User-assigned Managed Identity, ACR, an Azure AI Foundry account/project with a `gpt-4.1` model deployment, and a Container Apps Environment + Job running the orchestrator.
+
+v0.3 will add APIM (AI Gateway), AI Search, Cosmos DB, and persistent output storage.
+
+## Deployment
+
+Full operator instructions — OIDC federated-credential setup, manual `az` commands, validation, troubleshooting, and teardown — live in [docs/deployment-runbook.md](docs/deployment-runbook.md).
+
+Infrastructure entry point: [infra/main.bicep](infra/main.bicep) (subscription-scope), composed from modules in [infra/modules/](infra/modules/).
 
 ## Partner-reusable design principles
 
