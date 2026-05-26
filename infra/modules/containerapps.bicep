@@ -78,7 +78,9 @@ resource env 'Microsoft.App/managedEnvironments@2024-03-01' = {
 resource orchestratorJob 'Microsoft.App/jobs@2024-03-01' = {
   name: orchestratorJobName
   location: location
-  tags: tags
+  tags: union(tags, {
+    'azd-service-name': 'orchestrator'
+  })
   identity: {
     type: 'UserAssigned'
     userAssignedIdentities: {
