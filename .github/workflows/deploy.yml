@@ -30,19 +30,27 @@ on:
       partner_code:
         description: 'Partner short code (2-8 alphanumeric)'
         required: false
+        type: string
         default: 'acme'
       environment_name:
         description: 'Environment (dev, stg, prod)'
         required: false
+        type: choice
+        options:
+          - dev
+          - stg
+          - prod
         default: 'dev'
       location:
         description: 'Azure region'
         required: false
+        type: string
         default: 'northcentralus'
       run_smoke_assessment:
         description: 'Trigger a smoke assessment after deploy'
         required: false
-        default: 'true'
+        type: boolean
+        default: true
 
 permissions:
   id-token: write
