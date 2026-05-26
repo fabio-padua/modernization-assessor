@@ -49,13 +49,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: deploy-${{ github.ref }}-${{ inputs.environment_name || vars.ENVIRONMENT_NAME || 'dev' }}
+  group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  PARTNER_CODE: ${{ inputs.partner_code || vars.PARTNER_CODE || 'acme' }}
-  ENVIRONMENT_NAME: ${{ inputs.environment_name || vars.ENVIRONMENT_NAME || 'dev' }}
-  AZURE_LOCATION: ${{ inputs.location || vars.AZURE_LOCATION || 'northcentralus' }}
+  PARTNER_CODE: ${{ github.event.inputs.partner_code || vars.PARTNER_CODE || 'acme' }}
+  ENVIRONMENT_NAME: ${{ github.event.inputs.environment_name || vars.ENVIRONMENT_NAME || 'dev' }}
+  AZURE_LOCATION: ${{ github.event.inputs.location || vars.AZURE_LOCATION || 'northcentralus' }}
   MODEL_DEPLOYMENT_NAME: ${{ vars.MODEL_DEPLOYMENT_NAME || 'gpt-4.1' }}
   MODEL_NAME: ${{ vars.MODEL_NAME || 'gpt-4.1' }}
   MODEL_VERSION: ${{ vars.MODEL_VERSION || '' }}
@@ -199,7 +199,7 @@ jobs:
     name: Smoke assessment
     runs-on: ubuntu-latest
     needs: [provision, deploy_job]
-    if: ${{ (inputs.run_smoke_assessment == 'true') || (github.event_name == 'push') }}
+    if: ${{ (github.event.inputs.run_smoke_assessment == 'true') || (github.event_name == 'push') }}
     steps:
       - name: Azure login (OIDC)
         uses: azure/login@v2
