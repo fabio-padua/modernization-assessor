@@ -1,0 +1,45 @@
+# azure.yaml — Azure Developer CLI (azd) manifest for Modernization Assessor.
+# See: https://learn.microsoft.com/azure/developer/azure-developer-cli/azd-schema
+#
+# Usage:
+#   azd auth login
+#   azd init
+#   azd env set PARTNER_CODE acme
+#   azd env set ENVIRONMENT_NAME dev
+#   azd up
+
+name: modernization-assessor
+metadata:
+  template: modernization-assessor@0.2.0
+
+infra:
+  provider: bicep
+  path: infra
+  module: main
+
+services:
+  orchestrator:
+    project: ./src/Orchestrator
+    language: dotnet
+    host: containerapp
+    docker:
+      path: ../../src/Orchestrator/Dockerfile
+      context: ../..
+      remoteBuild: true
+
+hooks:
+  postprovision:
+    windows:
+      shell: pwsh
+      run: |
+        Write-Host "Provisioning complete."
+        Write-Host "Resource group   : $env:AZURE_RESOURCE_GROUP"
+        Write-Host "Container app    : $env:ORCHESTRATOR_JOB_NAME"
+        Write-Host "Foundry endpoint : $env:AZURE_AI_PROJECT_ENDPOINT"
+    posix:
+      shell: sh
+      run: |
+        echo "Provisioning complete."
+        echo "Resource group   : $AZURE_RESOURCE_GROUP"
+        echo "Container app    : $ORCHESTRATOR_JOB_NAME"
+        echo "Foundry endpoint : $AZURE_AI_PROJECT_ENDPOINT"

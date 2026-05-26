@@ -1,0 +1,219 @@
+name: deploy
+
+# Deploys infrastructure (Bicep) and the orchestrator container to Azure.
+# Requires the following repository (or environment) secrets/variables:
+#
+# Secrets:
+#   AZURE_CLIENT_ID         — App registration / managed identity used for OIDC login
+#   AZURE_TENANT_ID         — Entra tenant id
+#   AZURE_SUBSCRIPTION_ID   — Target Azure subscription
+#
+# Variables (set via repo or environment vars):
+#   PARTNER_CODE            — e.g. acme  (default: acme)
+#   ENVIRONMENT_NAME        — dev | stg | prod  (default: dev)
+#   AZURE_LOCATION          — e.g. northcentralus
+#   MODEL_DEPLOYMENT_NAME   — e.g. gpt-4.1
+#   MODEL_NAME              — e.g. gpt-4.1
+#   MODEL_VERSION           — optional explicit model version
+#   MODEL_CAPACITY          — TPM capacity in thousands (default: 50)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'infra/**'
+      - 'azure.yaml'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+    inputs:
+      partner_code:
+        description: 'Partner short code (2-8 alphanumeric)'
+        required: false
+        default: 'acme'
+      environment_name:
+        description: 'Environment (dev, stg, prod)'
+        required: false
+        default: 'dev'
+      location:
+        description: 'Azure region'
+        required: false
+        default: 'northcentralus'
+      run_smoke_assessment:
+        description: 'Trigger a smoke assessment after deploy'
+        required: false
+        default: 'true'
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}-${{ inputs.environment_name || vars.ENVIRONMENT_NAME || 'dev' }}
+  cancel-in-progress: false
+
+env:
+  PARTNER_CODE: ${{ inputs.partner_code || vars.PARTNER_CODE || 'acme' }}
+  ENVIRONMENT_NAME: ${{ inputs.environment_name || vars.ENVIRONMENT_NAME || 'dev' }}
+  AZURE_LOCATION: ${{ inputs.location || vars.AZURE_LOCATION || 'northcentralus' }}
+  MODEL_DEPLOYMENT_NAME: ${{ vars.MODEL_DEPLOYMENT_NAME || 'gpt-4.1' }}
+  MODEL_NAME: ${{ vars.MODEL_NAME || 'gpt-4.1' }}
+  MODEL_VERSION: ${{ vars.MODEL_VERSION || '' }}
+  MODEL_CAPACITY: ${{ vars.MODEL_CAPACITY || '50' }}
+
+jobs:
+  provision:
+    name: Provision infrastructure
+    runs-on: ubuntu-latest
+    outputs:
+      resource_group: ${{ steps.outputs.outputs.AZURE_RESOURCE_GROUP }}
+      acr_name: ${{ steps.outputs.outputs.AZURE_CONTAINER_REGISTRY_NAME }}
+      acr_endpoint: ${{ steps.outputs.outputs.AZURE_CONTAINER_REGISTRY_ENDPOINT }}
+      job_name: ${{ steps.outputs.outputs.ORCHESTRATOR_JOB_NAME }}
+      project_endpoint: ${{ steps.outputs.outputs.AZURE_AI_PROJECT_ENDPOINT }}
+      model_deployment: ${{ steps.outputs.outputs.AZURE_AI_MODEL_DEPLOYMENT_NAME }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve deployer principal id
+        id: principal
+        shell: bash
+        run: |
+          principalId=$(az ad sp show --id ${{ secrets.AZURE_CLIENT_ID }} --query id -o tsv 2>/dev/null || true)
+          if [ -z "$principalId" ]; then
+            principalId=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || true)
+          fi
+          echo "principal_id=$principalId" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Bicep (what-if)
+        run: |
+          az deployment sub what-if \
+            --name "modassessor-${{ env.PARTNER_CODE }}-${{ env.ENVIRONMENT_NAME }}-whatif-${{ github.run_number }}" \
+            --location "${{ env.AZURE_LOCATION }}" \
+            --template-file infra/main.bicep \
+            --parameters \
+              partnerCode=${{ env.PARTNER_CODE }} \
+              environmentName=${{ env.ENVIRONMENT_NAME }} \
+              location=${{ env.AZURE_LOCATION }} \
+              modelDeploymentName=${{ env.MODEL_DEPLOYMENT_NAME }} \
+              modelName=${{ env.MODEL_NAME }} \
+              modelVersion=${{ env.MODEL_VERSION }} \
+              modelCapacity=${{ env.MODEL_CAPACITY }} \
+              operatorPrincipalId=${{ steps.principal.outputs.principal_id }}
+
+      - name: Deploy infrastructure
+        id: deploy
+        run: |
+          az deployment sub create \
+            --name "modassessor-${{ env.PARTNER_CODE }}-${{ env.ENVIRONMENT_NAME }}-${{ github.run_number }}" \
+            --location "${{ env.AZURE_LOCATION }}" \
+            --template-file infra/main.bicep \
+            --parameters \
+              partnerCode=${{ env.PARTNER_CODE }} \
+              environmentName=${{ env.ENVIRONMENT_NAME }} \
+              location=${{ env.AZURE_LOCATION }} \
+              modelDeploymentName=${{ env.MODEL_DEPLOYMENT_NAME }} \
+              modelName=${{ env.MODEL_NAME }} \
+              modelVersion=${{ env.MODEL_VERSION }} \
+              modelCapacity=${{ env.MODEL_CAPACITY }} \
+              operatorPrincipalId=${{ steps.principal.outputs.principal_id }} \
+            --output json > deployment.json
+
+      - name: Extract deployment outputs
+        id: outputs
+        shell: bash
+        run: |
+          jq -r '.properties.outputs | to_entries[] | "\(.key)=\(.value.value)"' deployment.json >> "$GITHUB_OUTPUT"
+
+      - name: Upload deployment outputs artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-outputs
+          path: deployment.json
+          retention-days: 30
+
+  build_and_push:
+    name: Build and push orchestrator image
+    runs-on: ubuntu-latest
+    needs: provision
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
+      image_ref: ${{ steps.tag.outputs.image_ref }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Compute image tag
+        id: tag
+        shell: bash
+        run: |
+          tag="${GITHUB_SHA::7}-${{ github.run_number }}"
+          echo "image_tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image_ref=${{ needs.provision.outputs.acr_endpoint }}/modernization-assessor/orchestrator:$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push via ACR
+        run: |
+          az acr build \
+            --registry ${{ needs.provision.outputs.acr_name }} \
+            --image modernization-assessor/orchestrator:${{ steps.tag.outputs.image_tag }} \
+            --image modernization-assessor/orchestrator:latest \
+            --file src/Orchestrator/Dockerfile \
+            .
+
+  deploy_job:
+    name: Update Container Apps Job image
+    runs-on: ubuntu-latest
+    needs: [provision, build_and_push]
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure containerapp extension
+        run: az extension add --name containerapp --upgrade --yes
+
+      - name: Update job image
+        run: |
+          az containerapp job update \
+            --name ${{ needs.provision.outputs.job_name }} \
+            --resource-group ${{ needs.provision.outputs.resource_group }} \
+            --image ${{ needs.build_and_push.outputs.image_ref }}
+
+  smoke:
+    name: Smoke assessment
+    runs-on: ubuntu-latest
+    needs: [provision, deploy_job]
+    if: ${{ (inputs.run_smoke_assessment == 'true') || (github.event_name == 'push') }}
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure containerapp extension
+        run: az extension add --name containerapp --upgrade --yes
+
+      - name: Start orchestrator job execution
+        run: |
+          az containerapp job start \
+            --name ${{ needs.provision.outputs.job_name }} \
+            --resource-group ${{ needs.provision.outputs.resource_group }} \
+            --output table

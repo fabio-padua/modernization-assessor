@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "partnerCode": {
+      "value": "${PARTNER_CODE=acme}"
+    },
+    "environmentName": {
+      "value": "${ENVIRONMENT_NAME=dev}"
+    },
+    "location": {
+      "value": "${AZURE_LOCATION=northcentralus}"
+    },
+    "modelDeploymentName": {
+      "value": "${MODEL_DEPLOYMENT_NAME=gpt-4.1}"
+    },
+    "modelName": {
+      "value": "${MODEL_NAME=gpt-4.1}"
+    },
+    "modelVersion": {
+      "value": "${MODEL_VERSION=}"
+    },
+    "modelCapacity": {
+      "value": "${MODEL_CAPACITY=50}"
+    },
+    "orchestratorImage": {
+      "value": "${ORCHESTRATOR_IMAGE=mcr.microsoft.com/k8se/quickstart-jobs:latest}"
+    },
+    "operatorPrincipalId": {
+      "value": "${AZURE_PRINCIPAL_ID=}"
+    }
+  }
+}
