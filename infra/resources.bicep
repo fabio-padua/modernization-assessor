@@ -108,7 +108,7 @@ module containerapps 'modules/containerapps.bicep' = {
     location: location
     tags: tags
     environmentName: 'cae-${baseName}'
-    orchestratorJobName: 'caj-${baseName}-orchestrator'
+    orchestratorJobName: 'caj-${baseName}-orch'
     logAnalyticsCustomerId: observability.outputs.logAnalyticsCustomerId
     logAnalyticsSharedKey: observability.outputs.logAnalyticsSharedKey
     appInsightsConnectionString: observability.outputs.appInsightsConnectionString
