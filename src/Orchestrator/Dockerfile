@@ -26,10 +26,10 @@ RUN dotnet publish src/Orchestrator/ModernizationAssessor.Orchestrator.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
 
-# Non-root user for least privilege.
-RUN groupadd --system app && useradd --system --gid app --home /app appuser \
-    && mkdir -p /app/out /app/inventory \
-    && chown -R appuser:app /app
+# The aspnet:9.0 image already ships with a non-root `app` user (uid/gid 64198).
+# We only need the writable working directories.
+RUN mkdir -p /app/out /app/inventory \
+    && chown -R app:app /app/out /app/inventory
 
 COPY --from=build /app/publish ./
 COPY --from=build /src/samples ./samples
@@ -41,7 +41,7 @@ ENV DOTNET_RUNNING_IN_CONTAINER=true \
     ASSESSOR_INVENTORY=/app/samples/inventory/contoso.csv \
     ASSESSOR_CUSTOMER="Sample Customer"
 
-USER appuser
+USER app
 
 # Default command runs an assessment using the env vars above. CI / job overrides as needed.
 ENTRYPOINT ["dotnet", "ModernizationAssessor.Orchestrator.dll"]
