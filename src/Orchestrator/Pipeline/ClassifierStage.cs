@@ -2,8 +2,13 @@ using ModernizationAssessor.Shared.Models;
 
 namespace ModernizationAssessor.Orchestrator.Pipeline;
 
-internal sealed class ClassifierStage
+internal sealed class ClassifierStage : IClassifierStage
 {
+    public Task<IReadOnlyList<Classification>> ClassifyAsync(
+        IReadOnlyList<Workload> workloads,
+        CancellationToken ct)
+        => Task.FromResult(Classify(workloads));
+
     public IReadOnlyList<Classification> Classify(IEnumerable<Workload> workloads)
     {
         var results = new List<Classification>();

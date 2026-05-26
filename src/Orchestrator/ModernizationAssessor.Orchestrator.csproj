@@ -8,6 +8,7 @@
     <PackageReference Include="Azure.AI.Agents.Persistent" Version="1.1.0" />
     <PackageReference Include="Azure.Identity" Version="1.21.0" />
     <PackageReference Include="Azure.Monitor.OpenTelemetry.AspNetCore" Version="1.5.0" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.24.0" />
     <PackageReference Include="CsvHelper" Version="33.1.0" />
     <PackageReference Include="Microsoft.Agents.AI" Version="1.6.2" />
     <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.6.2" />
@@ -23,5 +24,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ModernizationAssessor.Orchestrator.Tests" />
+  </ItemGroup>
 
 </Project>

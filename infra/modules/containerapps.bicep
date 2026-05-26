@@ -42,6 +42,9 @@ param projectEndpoint string
 @description('Foundry model deployment name passed to the orchestrator.')
 param modelDeploymentName string
 
+@description('Reports blob container URL (e.g. https://<acct>.blob.core.windows.net/reports). Empty disables blob publishing.')
+param reportsContainerUrl string = ''
+
 @description('Replica timeout in seconds for the orchestrator job (default 30 minutes).')
 param replicaTimeoutSeconds int = 1800
 
@@ -105,6 +108,14 @@ resource orchestratorJob 'Microsoft.App/jobs@2024-03-01' = {
         {
           name: 'orchestrator'
           image: orchestratorImage
+          args: [
+            '--mode'
+            'agents'
+            '--inventory'
+            '/app/samples/inventory/contoso.csv'
+            '--customer'
+            'Sample Customer'
+          ]
           resources: {
             cpu: json('1.0')
             memory: '2.0Gi'
@@ -129,6 +140,10 @@ resource orchestratorJob 'Microsoft.App/jobs@2024-03-01' = {
             {
               name: 'ASSESSOR_OUTPUT_DIR'
               value: '/app/out'
+            }
+            {
+              name: 'ASSESSOR_OUTPUT_BLOB_URL'
+              value: reportsContainerUrl
             }
           ]
         }

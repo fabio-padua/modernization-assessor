@@ -5,8 +5,11 @@ using ModernizationAssessor.Shared.Models;
 
 namespace ModernizationAssessor.Orchestrator.Pipeline;
 
-internal sealed class DiscoveryStage
+internal sealed class DiscoveryStage : IDiscoveryStage
 {
+    public Task<IReadOnlyList<Workload>> NormalizeAsync(string inventoryPath, CancellationToken ct)
+        => Task.FromResult(Normalize(inventoryPath));
+
     public IReadOnlyList<Workload> Normalize(string csvPath)
     {
         using var reader = new StreamReader(csvPath);

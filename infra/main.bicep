@@ -94,3 +94,5 @@ output AZURE_LOG_ANALYTICS_WORKSPACE_ID string = platform.outputs.logAnalyticsWo
 output APPLICATIONINSIGHTS_CONNECTION_STRING string = platform.outputs.appInsightsConnectionString
 output AZURE_USER_ASSIGNED_IDENTITY_ID string = platform.outputs.identityResourceId
 output AZURE_USER_ASSIGNED_IDENTITY_CLIENT_ID string = platform.outputs.identityClientId
+output AZURE_STORAGE_ACCOUNT_NAME string = platform.outputs.storageAccountName
+output ASSESSOR_OUTPUT_BLOB_URL string = platform.outputs.reportsContainerUrl

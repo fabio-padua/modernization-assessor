@@ -20,6 +20,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Shared\ModernizationAssessor.Shared.csproj" />
+    <ProjectReference Include="..\..\src\Orchestrator\ModernizationAssessor.Orchestrator.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\samples\golden\classifier-golden-v1.jsonl"
+             Link="golden\classifier-golden-v1.jsonl"
+             CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

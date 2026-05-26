@@ -87,6 +87,20 @@ module foundry 'modules/foundry.bicep' = {
   }
 }
 
+// ---------- Storage (assessment report publishing) ----------
+var storageBaseName = take(replace(baseName, '-', ''), 15)
+module storage 'modules/storage.bicep' = {
+  name: 'storage'
+  params: {
+    location: location
+    tags: tags
+    storageAccountName: 'st${storageBaseName}${nameSuffix}'
+    reportsContainerName: 'reports'
+    workloadIdentityPrincipalId: identity.outputs.principalId
+    operatorPrincipalId: operatorPrincipalId
+  }
+}
+
 // ---------- Container Apps (orchestrator job) ----------
 module containerapps 'modules/containerapps.bicep' = {
   name: 'containerapps'
@@ -104,6 +118,7 @@ module containerapps 'modules/containerapps.bicep' = {
     orchestratorImage: orchestratorImage
     projectEndpoint: foundry.outputs.projectEndpoint
     modelDeploymentName: modelDeploymentName
+    reportsContainerUrl: storage.outputs.reportsContainerUrl
   }
 }
 
@@ -119,3 +134,5 @@ output logAnalyticsWorkspaceId string = observability.outputs.logAnalyticsResour
 output appInsightsConnectionString string = observability.outputs.appInsightsConnectionString
 output identityResourceId string = identity.outputs.identityResourceId
 output identityClientId string = identity.outputs.clientId
+output storageAccountName string = storage.outputs.storageAccountName
+output reportsContainerUrl string = storage.outputs.reportsContainerUrl
